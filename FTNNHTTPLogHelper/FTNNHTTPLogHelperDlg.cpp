@@ -13,6 +13,7 @@
 #include <vector>
 #include "zip.h"
 #include "Resource.h"
+#include "zlib.h"
 using namespace std;
 
 #ifdef _DEBUG
@@ -21,12 +22,8 @@ using namespace std;
 #define WM_UPDATE 1001
 
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
-typedef struct MyStruct
-{
-	CString URL;
-	CString Str;
-}URLAndStr;
-URLAndStr strURLAndFile;
+
+
 class CAboutDlg : public CDialogEx
 {
 public:
@@ -75,10 +72,11 @@ BEGIN_MESSAGE_MAP(CFTNNHTTPLogHelperDlg, CDialogEx)
 	ON_WM_SYSCOMMAND()
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
-	ON_MESSAGE(WM_UPDATE, OnUserLogin)
+	ON_WM_TIMER(UINT_PTR UINT_PTR nIDEvent)
 	ON_BN_CLICKED(IDC_DOWNLOAD, &CFTNNHTTPLogHelperDlg::OnBnClickedDownload)
 	ON_EN_CHANGE(IDC_URLEDIT, &CFTNNHTTPLogHelperDlg::OnEnChangeUrledit)
 	ON_STN_CLICKED(IDC_STATIC, &CFTNNHTTPLogHelperDlg::OnStnClickedStaitc)
+	ON_STN_CLICKED(IDC_DOWNTEXT, &CFTNNHTTPLogHelperDlg::OnStnClickedDowntext)
 END_MESSAGE_MAP()
 
 
@@ -120,7 +118,30 @@ BOOL CFTNNHTTPLogHelperDlg::OnInitDialog()
 
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
-
+void CFTNNHTTPLogHelperDlg::OnTimer(UINT_PTR nIDEvent)
+{
+	CString staticStatus_1 = _T("正在下载.");
+	CString staticStatus_2 = _T("正在下载..");
+	CString staticStatus_3 = _T("正在下载...");
+	switch (flag)
+	{
+	case 0:
+		GetDlgItem(IDC_DOWNTEXT)->SetWindowTextW(staticStatus_1);
+		flag++;
+		break;
+	case 1:
+		GetDlgItem(IDC_DOWNTEXT)->SetWindowTextW(staticStatus_2);
+		flag++;
+		break;
+	case 2:
+		GetDlgItem(IDC_DOWNTEXT)->SetWindowTextW(staticStatus_3);
+		flag++;
+		flag = flag % 3;
+		break;
+	default:
+		break;
+	}
+}
 void CFTNNHTTPLogHelperDlg::OnSysCommand(UINT nID, LPARAM lParam)
 {
 	if ((nID & 0xFFF0) == IDM_ABOUTBOX)
@@ -170,12 +191,14 @@ HCURSOR CFTNNHTTPLogHelperDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
-DWORD WINAPI CFTNNHTTPLogHelperDlg::HTTPGetFile(LPVOID lpParameter)
+BOOL CFTNNHTTPLogHelperDlg::HTTPGetFile(CString URLStr, CString strLocalSavePath)
 {
-	URLAndStr *urlAndStr = (URLAndStr *)lpParameter;
-	CString strURL = urlAndStr->URL;
-	CString strSavePath = urlAndStr->Str;
+
+	
+	CString strURL = URLStr;
+	CString strSavePath = strLocalSavePath;
 	CString localPath;
+
 	if (strURL.IsEmpty())
 		return FALSE;
 	if (strSavePath.IsEmpty())
@@ -195,7 +218,7 @@ DWORD WINAPI CFTNNHTTPLogHelperDlg::HTTPGetFile(LPVOID lpParameter)
 		pSession.Close();
 		return FALSE;
 	}
-	
+
 	CHttpFile *pFile = pConnect->OpenRequest(CHttpConnection::HTTP_VERB_GET, strObject);
 	if (pFile == NULL)
 	{
@@ -218,28 +241,29 @@ DWORD WINAPI CFTNNHTTPLogHelperDlg::HTTPGetFile(LPVOID lpParameter)
 	CHAR *szBuffer = new CHAR[fileLen + 1];
 	try{
 		CString str = _T("正在下载");
-		int flag = 3;
-		localPath.Format(_T("%s%s%s"), strSavePath, _T("\\"), pFile->GetFileName());
+		int flag = 0;
+		localPath.Format(_T("%s%s%s%s"), strSavePath, _T("\\"), pFile->GetFileName().Right(8),_T(".zip"));
 		CFile localFile(localPath, CFile::modeCreate | CFile::modeWrite | CFile::shareExclusive);
+
 		while (dwRead)
 		{
-			
+
 			memset(szBuffer, 0, (size_t)(fileLen + 1));
 			//读取到缓冲区
 			dwRead = pFile->Read(szBuffer, fileLen);
 			//写入到文件
 			localFile.Write(szBuffer, dwRead);
 		}
-		urlAndStr->Str = localPath;
-		AfxMessageBox(_T("下载完成,正在解压..."));
+		localFilePath = localPath;
+		GetDlgItem(IDC_DOWNTEXT)->SetWindowTextW(_T("下载完成，准备解压..."));
 		//http://172.18.10.120:8080/HttpServer/Tencent.zip
-		
+
 		localFile.Close();
 		delete[]szBuffer;
 		delete pFile;
 		delete pConnect;
 		pSession.Close();
-		
+
 	}
 	catch (CFileException e)
 	{
@@ -251,12 +275,7 @@ DWORD WINAPI CFTNNHTTPLogHelperDlg::HTTPGetFile(LPVOID lpParameter)
 	}
 	return TRUE;
 }
-LRESULT CFTNNHTTPLogHelperDlg::OnUserLogin(WPARAM wParam, LPARAM lParam)
-{
-	URLAndStr *URLStr = (URLAndStr *)wParam;
-	unCompressFile(&URLStr->Str);
-	return 0;
-}
+
 CString CFTNNHTTPLogHelperDlg::GetLocalFilePath()
 {
 	//
@@ -295,6 +314,7 @@ void CFTNNHTTPLogHelperDlg::OnEnChangeEdit1()
 
 void CFTNNHTTPLogHelperDlg::OnBnClickedDownload()
 {
+	flag = 0;
 	CEdit * pEdit = (CEdit *)GetDlgItem(IDC_URLEDIT);
 	flag_UnCompress = TRUE;
 	CString URLStr;//http://172.18.10.120:8080/HttpServer/VS2010SP1.iso
@@ -303,14 +323,12 @@ void CFTNNHTTPLogHelperDlg::OnBnClickedDownload()
 	CString strServer;
 	CString strFileName;
 	CString strLocalFile = GetLocalFilePath();
-	
-	strURLAndFile.Str = strLocalFile;
-	strURLAndFile.URL = URLStr;
-	m_ThreadDownload = CreateThread(NULL, 0,HTTPGetFile, (LPVOID)&strURLAndFile, 0, NULL);
+
+	//m_ThreadDownload = CreateThread(NULL, 0,HTTPGetFile, (LPVOID)&strURLAndFile, 0, NULL);
 	//BOOL IsSuccess = HTTPGetFile(URLStr, strLocalFile);
-	Sleep(10000);
-	unCompressFile(&strURLAndFile.Str);
-	
+	localFilePath = _T("C:\\HttpClient\\20181204.zip");
+	unCompressFile(&localFilePath);
+	AfxMessageBox(_T("下载解压完成"));
 
 
 }
@@ -327,10 +345,10 @@ void CFTNNHTTPLogHelperDlg::OnEnChangeUrledit()
 }
 BOOL CFTNNHTTPLogHelperDlg::unCompressFile(CString *mZipFileFullPath)
 {
-	
+
 	ZRESULT zr;
 	ZIPENTRY ze;
-	
+
 	CString mUnpackPath = mZipFileFullPath->Left(mZipFileFullPath->GetLength() - 4);
 	if (mZipFileFullPath->IsEmpty() || mUnpackPath.IsEmpty())
 		return FALSE;
@@ -348,10 +366,11 @@ BOOL CFTNNHTTPLogHelperDlg::unCompressFile(CString *mZipFileFullPath)
 			return FALSE;
 		}
 	}
-	
+
+
 	HZIP hz = OpenZip(*mZipFileFullPath, 0);//打开ZIP文件
 	int nReadFileSize = 0;
-	
+
 	if (hz == 0)
 		return FALSE;
 	zr = SetUnzipBaseDir(hz, mUnpackPath);
@@ -361,13 +380,14 @@ BOOL CFTNNHTTPLogHelperDlg::unCompressFile(CString *mZipFileFullPath)
 		return FALSE;
 	}
 	zr = GetZipItem(hz, -1, &ze);//获取zip文件内容
+
 	if (zr != ZR_OK)
 	{
 		CloseZip(hz);
 		return FALSE;
 	}
 	int numItem = ze.index;
-	for (int i = 0; i < numItem; i++)
+	for (int i = 0; i < numItem; i++)//http://172.28.249.58:8081/log/download?date=20181204
 	{
 		zr = GetZipItem(hz, i, &ze);
 		zr = UnzipItem(hz, i, ze.name);
@@ -444,3 +464,12 @@ void CFTNNHTTPLogHelperDlg::OnStnClickedStaitc()
 {
 	// TODO:  在此添加控件通知处理程序代码
 }
+
+
+void CFTNNHTTPLogHelperDlg::OnStnClickedDowntext()
+{
+	// TODO:  在此添加控件通知处理程序代码
+}
+
+
+
