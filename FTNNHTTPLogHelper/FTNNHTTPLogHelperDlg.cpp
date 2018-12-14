@@ -20,7 +20,7 @@ using namespace std;
 #define new DEBUG_NEW
 #endif
 #define WM_UPDATE 1001
-
+#define ZR_ENTITY 83886080
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
 
 
@@ -49,13 +49,17 @@ void CAboutDlg::DoDataExchange(CDataExchange* pDX)
 	CDialogEx::DoDataExchange(pDX);
 }
 
+
 BEGIN_MESSAGE_MAP(CAboutDlg, CDialogEx)
 END_MESSAGE_MAP()
 
 
 // CFTNNHTTPLogHelperDlg 对话框
 
-
+void CFTNNHTTPLogHelperDlg::OnOK()
+{
+	//重载OnOK截取Enter
+}
 
 CFTNNHTTPLogHelperDlg::CFTNNHTTPLogHelperDlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(CFTNNHTTPLogHelperDlg::IDD, pParent)
@@ -72,7 +76,7 @@ BEGIN_MESSAGE_MAP(CFTNNHTTPLogHelperDlg, CDialogEx)
 	ON_WM_SYSCOMMAND()
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
-	ON_WM_TIMER(UINT_PTR UINT_PTR nIDEvent)
+	
 	ON_BN_CLICKED(IDC_DOWNLOAD, &CFTNNHTTPLogHelperDlg::OnBnClickedDownload)
 	ON_EN_CHANGE(IDC_URLEDIT, &CFTNNHTTPLogHelperDlg::OnEnChangeUrledit)
 	ON_STN_CLICKED(IDC_STATIC, &CFTNNHTTPLogHelperDlg::OnStnClickedStaitc)
@@ -118,30 +122,7 @@ BOOL CFTNNHTTPLogHelperDlg::OnInitDialog()
 
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
-void CFTNNHTTPLogHelperDlg::OnTimer(UINT_PTR nIDEvent)
-{
-	CString staticStatus_1 = _T("正在下载.");
-	CString staticStatus_2 = _T("正在下载..");
-	CString staticStatus_3 = _T("正在下载...");
-	switch (flag)
-	{
-	case 0:
-		GetDlgItem(IDC_DOWNTEXT)->SetWindowTextW(staticStatus_1);
-		flag++;
-		break;
-	case 1:
-		GetDlgItem(IDC_DOWNTEXT)->SetWindowTextW(staticStatus_2);
-		flag++;
-		break;
-	case 2:
-		GetDlgItem(IDC_DOWNTEXT)->SetWindowTextW(staticStatus_3);
-		flag++;
-		flag = flag % 3;
-		break;
-	default:
-		break;
-	}
-}
+
 void CFTNNHTTPLogHelperDlg::OnSysCommand(UINT nID, LPARAM lParam)
 {
 	if ((nID & 0xFFF0) == IDM_ABOUTBOX)
@@ -325,12 +306,11 @@ void CFTNNHTTPLogHelperDlg::OnBnClickedDownload()
 	CString strLocalFile = GetLocalFilePath();
 
 	//m_ThreadDownload = CreateThread(NULL, 0,HTTPGetFile, (LPVOID)&strURLAndFile, 0, NULL);
-	//BOOL IsSuccess = HTTPGetFile(URLStr, strLocalFile);
-	localFilePath = _T("C:\\HttpClient\\20181204.zip");
-	unCompressFile(&localFilePath);
+	BOOL IsSuccess = HTTPGetFile(URLStr, strLocalFile);
+
+	if(unCompressFile(&localFilePath))
+		DeleteFile(localFilePath);
 	AfxMessageBox(_T("下载解压完成"));
-
-
 }
 
 
@@ -387,16 +367,18 @@ BOOL CFTNNHTTPLogHelperDlg::unCompressFile(CString *mZipFileFullPath)
 		return FALSE;
 	}
 	int numItem = ze.index;
-	for (int i = 0; i < numItem; i++)//http://172.28.249.58:8081/log/download?date=20181204
+	for (int i = 0; i < numItem; i++)//http://172.28.249.58:8081/log/download?date=20181213
 	{
 		zr = GetZipItem(hz, i, &ze);
 		zr = UnzipItem(hz, i, ze.name);
-		if (zr != ZR_OK)
+		if (zr != ZR_OK&&zr != ZR_ENTITY)//83886080
 		{
 			CloseZip(hz);
+			DeleteFile(*mZipFileFullPath);
 			return FALSE;
 		}
 	}
+	
 	CloseZip(hz);
 	return TRUE;
 }
