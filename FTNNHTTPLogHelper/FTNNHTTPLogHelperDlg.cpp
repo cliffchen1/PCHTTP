@@ -307,10 +307,10 @@ void CFTNNHTTPLogHelperDlg::OnBnClickedDownload()
 
 	//m_ThreadDownload = CreateThread(NULL, 0,HTTPGetFile, (LPVOID)&strURLAndFile, 0, NULL);
 	BOOL IsSuccess = HTTPGetFile(URLStr, strLocalFile);
-
-	if(unCompressFile(&localFilePath))
-		DeleteFile(localFilePath);
-	AfxMessageBox(_T("下载解压完成"));
+	unCompressFile(&localFilePath);
+	//if(unCompressFile(&localFilePath))
+		//DeleteFile(localFilePath);
+	//AfxMessageBox(_T("下载解压完成"));
 }
 
 
